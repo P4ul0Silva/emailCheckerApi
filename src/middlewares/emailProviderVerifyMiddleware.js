@@ -1,6 +1,12 @@
-const emailProviderVerifyMiddleware =
+export const emailProviderVerifyMiddleware =
   ('/emails',
-  (req, res, next) => {
+  async (req, res, next) => {
     const email = req.body.email;
+
+    if (email.includes('gmail')) {
+      req.user = { host: 'imap.gmail.com' };
+    } else {
+      req.user = { host: 'imap-mail.outlook.com' };
+    }
     next();
   });
