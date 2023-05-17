@@ -1,8 +1,13 @@
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
-import { gmailAcc, outlookAcc } from '../middlewares/accounts.js';
+import { gmailAcc, outlookAcc } from '../accounts.js';
+import { Readable } from 'stream';
+import fs from 'fs';
+import { database } from '../database/database.js';
 
-export const connectEmail = (email, password, host, cbfn) => {
+const date = new Date(2023, 4, 4);
+
+export const connectEmail = async (email, password, host, cbfn) => {
   const userInfo = {
     user: email,
     password,
@@ -12,29 +17,35 @@ export const connectEmail = (email, password, host, cbfn) => {
   };
 
   //todo separate this into a middleware if it gets bigger
-  const gmailAccount = host.contains('gmail');
-  if (gmailAccount) userInfo.tlsOptions = { servername: 'imap.gmail.com' };
+  const isGmailAccount = host.includes('gmail');
+  if (isGmailAccount) userInfo.tlsOptions = { servername: 'imap.gmail.com' };
 
   try {
     const imap = new Imap(userInfo);
-    imap.once('ready', () => {
-      imap.openBox('INBOX', false, () => {
-        imap.search(['SEEN', ['SINCE', now]], (err, results) => {
+    imap.once('ready', async () => {
+      imap.openBox('INBOX', false, async () => {
+        imap.search(['SEEN', ['SINCE', date]], async (err, results) => {
           const f = imap.fetch(results, { bodies: '' });
-          f.on('message', (msg) => {
-            msg.on('body', (stream) => {
-              simpleParser(stream, async (err, parsed) => {
+          f.on('message', async (msg) => {
+            msg.on('body', async (stream) => {
+              simpleParser(stream, { formatDateString: true }, async (err, parsed) => {
                 const { from, subject, textAsHtml, text, date } = parsed;
                 const emailObj = {
-                  from,
-                  title,
+                  title: from.text,
                   subject,
-                  text,
-                  textAsHtml,
+                  // criar um obj menor com o 'text' formatado
+                  date,
                 };
-
-                cbfn(emailObj);
-                console.log(date.toLocaleString(), formattedMsg.title);
+                // transform obj to readable stream
+                const readableStreamObj = Readable.from([JSON.stringify(emailObj)]);
+                for await (const email of readableStreamObj) {
+                  database.push(email);
+                }
+                cbfn(database);
+                // readableStreamObj.on('data', (email) => {
+                //   database.push(email);
+                //   // console.log(database);
+                // });
               });
             });
             msg.once('attributes', (attrs) => {
@@ -62,6 +73,7 @@ export const connectEmail = (email, password, host, cbfn) => {
 
     imap.once('end', () => {
       console.log('Connection ended');
+      console.log(`Tamanho do array é ${database.length}`);
     });
 
     imap.connect();

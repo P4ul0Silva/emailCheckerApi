@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getActivationCodeController } from '../controllers/emails.controllers';
+import { getActivationCodeController } from '../controllers/emails.controllers.js';
+import { emailProviderVerifyMiddleware } from '../middlewares/emailProviderVerifyMiddleware.js';
 
 const emailRoutes = Router();
 
