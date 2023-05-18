@@ -20,64 +20,60 @@ export const connectEmail = async (email, password, host, cbfn) => {
   const isGmailAccount = host.includes('gmail');
   if (isGmailAccount) userInfo.tlsOptions = { servername: 'imap.gmail.com' };
 
-  try {
-    const imap = new Imap(userInfo);
-    imap.once('ready', async () => {
-      imap.openBox('INBOX', false, async () => {
-        imap.search(['SEEN', ['SINCE', date]], async (err, results) => {
-          const f = imap.fetch(results, { bodies: '' });
-          f.on('message', async (msg) => {
-            msg.on('body', async (stream) => {
-              simpleParser(stream, { formatDateString: true }, async (err, parsed) => {
-                const { from, subject, textAsHtml, text, date } = parsed;
-                const emailObj = {
-                  title: from.text,
-                  subject,
-                  // criar um obj menor com o 'text' formatado
-                  date,
-                };
-                // transform obj to readable stream
-                const readableStreamObj = Readable.from([JSON.stringify(emailObj)]);
-                for await (const email of readableStreamObj) {
-                  database.push(email);
-                }
-                cbfn(database);
-                // readableStreamObj.on('data', (email) => {
-                //   database.push(email);
-                //   // console.log(database);
-                // });
-              });
-            });
-            msg.once('attributes', (attrs) => {
-              const { uid } = attrs;
-              imap.addFlags(uid, ['\\Seen'], () => {
-                // Mark the email as read after reading it
-                console.log('Marked as read!');
-              });
+  const imap = new Imap(userInfo);
+  imap.once('ready', async () => {
+    imap.openBox('INBOX', false, async () => {
+      imap.search(['SEEN', ['SINCE', date]], async (err, results) => {
+        const f = imap.fetch(results, { bodies: '' });
+        f.on('message', async (msg) => {
+          msg.on('body', async (stream) => {
+            simpleParser(stream, { formatDateString: true }, async (err, parsed) => {
+              const { from, subject, textAsHtml, text, date } = parsed;
+              const emailObj = {
+                title: from.text,
+                subject,
+                // criar um obj menor com o 'text' formatado
+                date,
+              };
+              // transform obj to readable stream
+              const readableStreamObj = Readable.from([JSON.stringify(emailObj)]);
+              for await (const email of readableStreamObj) {
+                database.push(email);
+              }
+              cbfn(database);
+              // readableStreamObj.on('data', (email) => {
+              //   database.push(email);
+              //   // console.log(database);
+              // });
             });
           });
-          f.once('error', (ex) => {
-            return Promise.reject(ex);
+          msg.once('attributes', (attrs) => {
+            const { uid } = attrs;
+            imap.addFlags(uid, ['\\Seen'], () => {
+              // Mark the email as read after reading it
+              console.log('Marked as read!');
+            });
           });
-          f.once('end', () => {
-            console.log('Done fetching all messages!');
-            imap.end();
-          });
+        });
+        f.once('error', (ex) => {
+          return Promise.reject(ex);
+        });
+        f.once('end', () => {
+          console.log('Done fetching all messages!');
+          imap.end();
         });
       });
     });
+  });
 
-    imap.once('error', (err) => {
-      console.log(err);
-    });
+  imap.once('error', (err) => {
+    console.log(err);
+  });
 
-    imap.once('end', () => {
-      console.log('Connection ended');
-      console.log(`Tamanho do array é ${database.length}`);
-    });
+  imap.once('end', () => {
+    console.log('Connection ended');
+    console.log(`Tamanho do array é ${database.length}`);
+  });
 
-    imap.connect();
-  } catch (ex) {
-    console.log('an error occurred', ex);
-  }
+  imap.connect();
 };
